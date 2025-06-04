@@ -22,7 +22,7 @@ const TransactionList = () => {
   useEffect(() => {
     const fetchTransactions = async () => {
       try {
-        const res = await fetch('/api/transactions');
+        const res = await fetch('/api/transaction');
         const data = await res.json();
         if (!res.ok) throw new Error(data.error || 'Error al obtener transacciones');
         setTransactions(data);
