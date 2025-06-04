@@ -1,0 +1,43 @@
+generator client {
+  provider = "prisma-client-js"
+  output   = "../src/generated/prisma"
+}
+
+datasource db {
+  provider = "sqlite"
+  url      = env("DATABASE_URL")
+}
+
+model Bank {
+  bank_code String @id
+  name      String
+  ip        String
+  createdAt DateTime @default(now())
+}
+
+model Account {
+  account_number String @id          
+  name           String
+  phone_number   String @unique
+  bank_code      String              
+  balance        Float
+  createdAt      DateTime @default(now())
+}
+
+model Transaction {
+  transaction_id          String   @id @default(uuid())
+  timestamp               DateTime @default(now())
+  sender_account_number   String
+  sender_bank_code        String
+  sender_name             String
+  receiver_account_number String
+  receiver_bank_code      String
+  receiver_name           String
+  amount_value            Float
+  amount_currency         String
+  description             String
+  hmac_md5                String
+}
+
+
+
