@@ -37,7 +37,7 @@ const TransactionList = () => {
   }, []);
 
   return (
-    <div className="max-w-7xl mx-auto mt-10 p-4 bg-white shadow-md rounded-lg">
+    <div className="max-w-7xl mx-auto mt-10 p-4 bg-white shadow-md rounded-lg text-black">
       <h2 className="text-2xl font-semibold mb-4">Transacciones Registradas</h2>
 
       {loading && <p className="text-gray-600">Cargando transacciones...</p>}
