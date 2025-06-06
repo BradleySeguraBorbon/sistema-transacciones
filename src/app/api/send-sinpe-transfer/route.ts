@@ -2,39 +2,83 @@ import { NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
 import { generateHmacMD5, validateTransactionPayload } from '@/lib/transferHelpers';
 import { getBankIp } from '@/lib/bankIps';
+import crypto from 'crypto';
+
+/* Helper ────────────────────────────────────────────────────────────── */
+function extractBankCode(account: string) {
+  const match = account.match(/^CR21(\d{4})/);
+  return match ? match[1] : '';
+}
 
 export async function POST(req: Request) {
   try {
-    const body = await req.json();
+    /* 0. Leer SOLO lo que envió el front */
+    const body = await req.json(); // may contain senderAccount, receiverAccount, amount, description…
 
-    /* 1. Validación del payload */
-    const { valid, error } = validateTransactionPayload(body);
-    if (!valid) return NextResponse.json({ error }, { status: 400 });
-
-    const { transaction_id, timestamp, sender, receiver, amount, description } = body;
-
-    /* 2. Verificar cuenta y saldo remitente en TU banco */
-    const senderAccount = await prisma.account.findUnique({
-      where: { account_number: sender.account_number },
-    });
-    if (!senderAccount || senderAccount.balance < amount.value) {
+    /* 0-bis. Pequeña validación mínima (campos obligatorios) */
+    if (
+      !body?.sender?.account_number ||
+      !body?.receiver?.account_number ||
+      !body?.amount?.value
+    ) {
       return NextResponse.json(
-        { error: 'Sender not found or insufficient funds' },
-        { status: 400 }
+        { error: 'Missing sender, receiver or amount' },
+        { status: 400 },
       );
     }
 
-    /* 3. Obtener IP del banco destino a partir del bankCode que
-          el usuario ingresa en el formulario */
+    /** -----------------------------------------------------------------
+     * 1. Recuperar datos del remitente en TU banco
+     * ----------------------------------------------------------------- */
+    const senderAccount = await prisma.account.findUnique({
+      where: { account_number: body.sender.account_number },
+    });
+    if (!senderAccount)
+      return NextResponse.json({ error: 'Sender not found' }, { status: 404 });
+
+    if (senderAccount.balance < body.amount.value)
+      return NextResponse.json({ error: 'Insufficient funds' }, { status: 400 });
+
+    /** -----------------------------------------------------------------
+     * 2. Derivar y componer TODOS los campos requeridos
+     * ----------------------------------------------------------------- */
+    const transaction_id = body.transaction_id ?? crypto.randomUUID();
+    const timestamp      = body.timestamp      ?? new Date().toISOString();
+
+    const receiverBankCode = extractBankCode(body.receiver.account_number);
+    if (!receiverBankCode)
+      return NextResponse.json({ error: 'Invalid receiver IBAN' }, { status: 400 });
+
+    const sender = {
+      account_number: senderAccount.account_number,
+      bank_code: senderAccount.bank_code,
+      name: senderAccount.name,                // usamos el nombre almacenado
+    };
+
+    const receiver = {
+      account_number: body.receiver.account_number,
+      bank_code: receiverBankCode,
+      name: body.receiver.name ?? '',          // opcional
+    };
+
+    const amount = {
+      value: body.amount.value,
+      currency: body.amount.currency ?? 'CRC',
+    };
+
+    const description = body.description ?? '';
+
+    /** -----------------------------------------------------------------
+     * 3. Bank-to-bank routing
+     * ----------------------------------------------------------------- */
     const destIp = getBankIp(receiver.bank_code);
-    if (!destIp) {
+    if (!destIp)
       return NextResponse.json(
         { error: `IP not configured for bank ${receiver.bank_code}` },
-        { status: 400 }
+        { status: 400 },
       );
-    }
 
-    /* 4. Generar HMAC utilizado por el banco remoto */
+    /** 4. HMAC sobre los campos obligatorios */
     const hmac_md5 = generateHmacMD5({
       account_identifier: sender.account_number,
       timestamp,
@@ -42,35 +86,45 @@ export async function POST(req: Request) {
       amount_value: amount.value,
     });
 
-    /* 5. Descontar saldo de forma transaccional */
+    /** 5. Cuerpo COMPLETO para el banco destino */
+    const remotePayload = {
+      version: '1.0',
+      transaction_id,
+      timestamp,
+      sender,
+      receiver,
+      amount,
+      description,
+      hmac_md5,
+    };
+
+    /* 5-bis. Validación interna: aseguramos que el JSON que enviamos
+       cumple tu esquema rígido, sin exigirle eso al front. */
+    const { valid, error } = validateTransactionPayload(remotePayload);
+    if (!valid) {
+      console.error('Generated payload invalid', error, remotePayload);
+      return NextResponse.json({ error: 'Internal payload error' }, { status: 500 });
+    }
+
+    /** -----------------------------------------------------------------
+     * 6. Operación transaccional local  +  llamada remota
+     * ----------------------------------------------------------------- */
     await prisma.$transaction(async (tx) => {
       await tx.account.update({
         where: { account_number: sender.account_number },
         data: { balance: { decrement: amount.value } },
       });
 
-      /* 6. Llamar al banco destino */
       const remoteRes = await fetch(`${destIp}/api/sinpe-transfer`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          version: '1.0',
-          transaction_id,
-          timestamp,
-          sender,
-          receiver,
-          amount,
-          description,
-          hmac_md5,
-        }),
+        body: JSON.stringify(remotePayload),
       });
 
       if (!remoteRes.ok) {
-        /* Revertir si el banco destino falla */
         throw new Error(`Remote bank error ${remoteRes.status}`);
       }
 
-      /* 7. Registrar transacción local */
       await tx.transaction.create({
         data: {
           transaction_id,

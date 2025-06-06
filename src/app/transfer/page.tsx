@@ -2,6 +2,11 @@
 
 import React, { useState } from 'react';
 
+function extractBankCode(account: string) {
+  const match = account.match(/^CR21(\d{4})/);
+  return match ? match[1] : '';
+}
+
 const TransferForm = () => {
   const [form, setForm] = useState({
     senderAccount: '',
@@ -15,7 +20,13 @@ const TransferForm = () => {
 
   const handleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const { name, value } = e.target;
-    setForm(prev => ({ ...prev, [name]: value }));
+    // If the user is typing the receiver account, derive its bank code
+    if (name === 'receiverAccount') {
+      const bankCode = extractBankCode(value);
+      setForm(prev => ({ ...prev, receiverAccount: value}));
+    } else {
+      setForm(prev => ({ ...prev, [name]: value }));
+    }
   };
 
   const handleSubmit = async (e: React.FormEvent) => {
