@@ -8,7 +8,7 @@ async function main() {
   await prisma.bank.createMany({
     data: [
       {
-        bank_code: '0050',
+        bank_code: '0150',
         name: 'Banco BSM',
         ip: '192.168.3.2',
         createdAt: now,
@@ -19,37 +19,14 @@ async function main() {
   await prisma.account.createMany({
     data: [
       {
-        account_number: 'CR2100500001000000001234',
-        name: 'Juan Pérez',
+        account_number: 'CR2101500001000000001234',
+        name: 'Marco Fallas',
         phone_number: '70112233',
-        bank_code: '0050',
+        bank_code: '0150',
         balance: 1000,
         createdAt: now,
-      },
-      {
-        account_number: 'CR2100500001000000005678',
-        name: 'Ana Gómez',
-        phone_number: '70112234',
-        bank_code: '0050',
-        balance: 25000,
-        createdAt: now,
-      },
-      {
-        account_number: 'CR2100500001000000006849',
-        name: 'Luis Cordero',
-        phone_number: '88887777',
-        bank_code: '0050',
-        balance: 8000,
-        createdAt: now,
-      },
-      {
-        account_number: 'CR210050000100000015498',
-        name: 'Pedro Abarca',
-        phone_number: '88887788',
-        bank_code: '0050',
-        balance: 3500,
-        createdAt: now,
-      },
+      }
+
     ],
   });
 
