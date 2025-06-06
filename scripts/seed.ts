@@ -10,7 +10,7 @@ async function main() {
       {
         bank_code: '0050',
         name: 'Banco BSM',
-        ip: '192.168.0.1',
+        ip: '192.168.3.2',
         createdAt: now,
       }
     ]
@@ -43,7 +43,7 @@ async function main() {
         createdAt: now,
       },
       {
-        account_number: 'CCR210050000100000015498',
+        account_number: 'CR210050000100000015498',
         name: 'Pedro Abarca',
         phone_number: '88887788',
         bank_code: '0050',
