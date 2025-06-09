@@ -43,9 +43,9 @@ export async function POST(req: Request) {
       });
     });
 
-    return NextResponse.json({ success: true });
+    return NextResponse.json({ status: 'ACK', message: 'Transferencia acreditada' });
   } catch (err: any) {
     console.error('[SINPE_MOVIL_TRANSFER]', err);
-    return NextResponse.json({ error: err.message }, { status: 400 });
+    return NextResponse.json({ status: 'NCK', message: err.message }, { status: 400 });
   }
 }

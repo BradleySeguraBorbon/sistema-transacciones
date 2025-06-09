@@ -110,21 +110,34 @@ export async function POST(req: Request) {
      * 6. Operación transaccional local  +  llamada remota
      * ----------------------------------------------------------------- */
     await prisma.$transaction(async (tx) => {
+      // Paso 1: Débito temporal
       await tx.account.update({
         where: { account_number: sender.account_number },
         data: { balance: { decrement: amount.value } },
       });
 
+      // Paso 2: Enviar a banco receptor
       const remoteRes = await fetch(`${destIp}/api/sinpe-transfer`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(remotePayload),
       });
 
-      if (!remoteRes.ok) {
-        throw new Error(`Remote bank error ${remoteRes.status}`);
+      const remoteData = await remoteRes.json();
+
+      // Paso 3: Si falla, rollback
+      if (remoteData.status !== 'ACK') {
+        await tx.account.update({
+          where: { account_number: sender.account_number },
+          data: { balance: { increment: amount.value } },
+        });
+        return NextResponse.json({
+          error: 'Transfer failed on receiver bank',
+          details: remoteData,
+        }, { status: 400 });
       }
 
+      // Paso 4: Registrar transacción
       await tx.transaction.create({
         data: {
           transaction_id,

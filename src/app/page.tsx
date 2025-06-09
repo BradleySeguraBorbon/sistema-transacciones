@@ -11,7 +11,7 @@ const HomePage = () => {
   };
 
   return (
-    <main className="min-h-screen flex items-center justify-center bg-gray-50">
+    <main className="min-h-screen flex items-center justify-center bg-gray-300">
       <div className="bg-white shadow-lg rounded-lg p-10 max-w-md w-full space-y-6 text-center">
         <h1 className="text-3xl font-bold text-gray-800">Sistema de Transferencias</h1>
         <p className="text-gray-600">Selecciona una acción para comenzar</p>
@@ -36,6 +36,13 @@ const HomePage = () => {
             className="w-full bg-gray-800 text-white py-2 rounded hover:bg-gray-900 transition"
           >
             Ver Transacciones
+          </button>
+
+          <button
+            onClick={() => navigate('/sinpe-register')}
+            className="w-full bg-gray-500 text-white py-2 rounded hover:bg-gray-600 transition"
+          >
+            Registrar en SINPE
           </button>
         </div>
       </div>

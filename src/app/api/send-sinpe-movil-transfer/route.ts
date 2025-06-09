@@ -2,38 +2,68 @@ import { NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
 import { generateHmacMD5, validateTransactionPayload } from '@/lib/transferHelpers';
 import { getBankIp } from '@/lib/bankIps';
-import { lookupPhoneCentral } from '@/lib/lookupPhoneCentral';
-
+import { lookupSinpePhone } from '@/lib/lookupSinpe';
+import crypto from 'crypto';
 
 export async function POST(req: Request) {
   try {
     const body = await req.json();
-    const { valid, error } = validateTransactionPayload(body);
-    if (!valid) return NextResponse.json({ error }, { status: 400 });
 
-    const { transaction_id, timestamp, sender, receiver, amount, description } = body;
-
-    const senderAccount = await prisma.account.findUnique({
-      where: { phone_number: sender.phone_number },
-    });
-    if (!senderAccount || senderAccount.balance < amount.value) {
+    if (
+      !body?.sender?.phone_number ||
+      !body?.receiver?.phone_number ||
+      !body?.amount?.value
+    ) {
       return NextResponse.json(
-        { error: 'Sender not found or insufficient funds' },
-        { status: 400 }
+        { error: 'Missing sender, receiver or amount' },
+        { status: 400 },
       );
     }
 
-    /* 1. Pedimos al usuario el banco destino (código) y buscamos IP */
+    /** 1. Verificar existencia del remitente */
+    const senderAccount = await prisma.account.findUnique({
+      where: { phone_number: body.sender.phone_number },
+    });
+    if (!senderAccount)
+      return NextResponse.json({ error: 'Sender not found' }, { status: 404 });
+
+    if (senderAccount.balance < body.amount.value)
+      return NextResponse.json({ error: 'Insufficient funds' }, { status: 400 });
+
+    /** 2. Buscar receptor en PostgreSQL SINPE */
+    const sinpeReceiver = await lookupSinpePhone(body.receiver.phone_number);
+    if (!sinpeReceiver)
+      return NextResponse.json({ error: 'Receiver not registered in SINPE' }, { status: 404 });
+
+    const transaction_id = crypto.randomUUID();
+    const timestamp = new Date().toISOString();
+
+    const sender = {
+      phone_number: senderAccount.phone_number,
+      bank_code: senderAccount.bank_code,
+      name: senderAccount.name,
+    };
+
+    const receiver = {
+      phone_number: sinpeReceiver.phone_number,
+      bank_code: sinpeReceiver.bank_code,
+      name: sinpeReceiver.name ?? '',
+    };
+
+    const amount = {
+      value: body.amount.value,
+      currency: body.amount.currency ?? 'CRC',
+    };
+
+    const description = body.description ?? '';
+
     const destIp = getBankIp(receiver.bank_code);
     if (!destIp) {
       return NextResponse.json(
         { error: `IP not configured for bank ${receiver.bank_code}` },
-        { status: 400 }
+        { status: 400 },
       );
     }
-
-    /* 2. Resolvemos teléfono receptor -> cuenta destino */
-    const resolved = await lookupPhoneCentral(receiver.phone_number);
 
     const hmac_md5 = generateHmacMD5({
       account_identifier: sender.phone_number,
@@ -42,50 +72,73 @@ export async function POST(req: Request) {
       amount_value: amount.value,
     });
 
+    const remotePayload = {
+      version: '1.0',
+      transaction_id,
+      timestamp,
+      sender,
+      receiver,
+      amount,
+      description,
+      hmac_md5,
+    };
+
+    const { valid, error } = validateTransactionPayload(remotePayload);
+    if (!valid) {
+      console.error('Generated payload invalid', error, remotePayload);
+      return NextResponse.json({ error: 'Internal payload error' }, { status: 500 });
+    }
+
     await prisma.$transaction(async (tx) => {
+      // Paso 1: Débito temporal
       await tx.account.update({
         where: { phone_number: sender.phone_number },
         data: { balance: { decrement: amount.value } },
       });
 
+      // Paso 2: Envío remoto
       const remoteRes = await fetch(`${destIp}/api/sinpe-movil-transfer`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          version: '1.0',
-          transaction_id,
-          timestamp,
-          sender,
-          receiver: resolved, // usamos cuenta real devuelta por lookup
-          amount,
-          description,
-          hmac_md5,
-        }),
+        body: JSON.stringify(remotePayload),
       });
 
-      if (!remoteRes.ok) throw new Error(`Remote bank error ${remoteRes.status}`);
+      const remoteData = await remoteRes.json();
+
+      // Paso 3: Evaluar respuesta
+      if (remoteData.status !== 'ACK') {
+        await tx.account.update({
+          where: { phone_number: sender.phone_number },
+          data: { balance: { increment: amount.value } },
+        });
+        return NextResponse.json({
+          error: 'Transfer failed on receiver bank',
+          details: remoteData,
+        }, { status: 400 });
+      }
 
       await tx.transaction.create({
         data: {
           transaction_id,
           timestamp: new Date(timestamp),
-          sender_account_number: senderAccount.account_number,
+          sender_account_number: sender.phone_number,
           sender_bank_code: sender.bank_code,
           sender_name: sender.name,
-          receiver_account_number: resolved.account_number,
-          receiver_bank_code: resolved.bank_code,
-          receiver_name: resolved.name,
+          receiver_account_number: receiver.phone_number,
+          receiver_bank_code: receiver.bank_code,
+          receiver_name: receiver.name,
           amount_value: amount.value,
           amount_currency: amount.currency,
           description,
           hmac_md5,
         },
       });
-    });
 
-    return NextResponse.json({ success: true });
+      return NextResponse.json({ success: true });
+    });
+    
   } catch (err: any) {
-    console.error('[SEND_SINPE_TRANSFER]', err);
+    console.error('[SEND_SINPE_MOVIL]', err);
     return NextResponse.json({ error: 'Transfer failed' }, { status: 500 });
   }
 }
