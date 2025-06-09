@@ -44,6 +44,14 @@ const HomePage = () => {
           >
             Registrar en SINPE
           </button>
+          
+          <button
+            onClick={() => navigate('/balances')}
+            className="w-full bg-purple-600 text-white py-2 rounded hover:bg-purple-700 transition"
+          >
+            Ver Saldos de Cuentas
+          </button>
+
         </div>
       </div>
     </main>
