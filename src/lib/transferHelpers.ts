@@ -9,8 +9,26 @@ interface HmacInput {
 
 export function generateHmacMD5({ account_identifier, timestamp, transaction_id, amount_value }: HmacInput): string {
   const secret = process.env.SECRET_KEY!;
-  const data = `${account_identifier},${timestamp},${transaction_id},${amount_value}`;
-  return crypto.createHmac('md5', secret).update(data).digest('hex');
+  const amountFormatted = amount_value.toFixed(2);
+  const message = `${account_identifier}${timestamp}${transaction_id}${amountFormatted}`;
+  return crypto.createHmac('md5', secret).update(message).digest('hex');
+}
+
+interface FullPayload {
+  timestamp: string;
+  transaction_id: string;
+  hmac_md5: string;
+  sender: { account_number?: string; phone_number?: string };
+  amount: { value: number };
+}
+
+export function verifyHmacMD5(data: FullPayload): boolean {
+  const secret = process.env.SECRET_KEY!;
+  const id = data.sender.account_number ?? data.sender.phone_number ?? '';
+  const amount = data.amount.value.toFixed(2);
+  const message = `${id}${data.timestamp}${data.transaction_id}${amount}`;
+  const expected = crypto.createHmac('md5', secret).update(message).digest('hex');
+  return expected === data.hmac_md5;
 }
 
 export function validateTransactionPayload(body: any): { valid: boolean; error?: string } {

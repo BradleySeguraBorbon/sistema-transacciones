@@ -42,6 +42,8 @@ export async function registerSinpePhone({
   const client = createClient();
   await client.connect();
 
+  const trimmedBankCode = bank_code.slice(-3);
+
   try {
     const res = await client.query(
       `
@@ -49,7 +51,7 @@ export async function registerSinpePhone({
       VALUES ($1, $2, $3)
       RETURNING sinpe_number, sinpe_client_name, sinpe_bank_code
       `,
-      [phone_number, client_name, bank_code]
+      [phone_number, client_name, trimmedBankCode]
     );
 
     await client.end();

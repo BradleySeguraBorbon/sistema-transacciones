@@ -3,6 +3,7 @@ import { prisma } from '@/lib/prisma';
 import { generateHmacMD5, validateTransactionPayload } from '@/lib/transferHelpers';
 import { getBankIp } from '@/lib/bankIps';
 import crypto from 'crypto';
+import { Agent, fetch as undiciFetch } from 'undici';
 
 /* Helper ────────────────────────────────────────────────────────────── */
 function extractBankCode(account: string) {
@@ -43,7 +44,7 @@ export async function POST(req: Request) {
      * 2. Derivar y componer TODOS los campos requeridos
      * ----------------------------------------------------------------- */
     const transaction_id = body.transaction_id ?? crypto.randomUUID();
-    const timestamp      = body.timestamp      ?? new Date().toISOString();
+    const timestamp = body.timestamp ?? new Date().toISOString();
 
     const receiverBankCode = extractBankCode(body.receiver.account_number);
     if (!receiverBankCode)
@@ -116,14 +117,21 @@ export async function POST(req: Request) {
         data: { balance: { decrement: amount.value } },
       });
 
+      const agent = new Agent({
+        connect: {
+          rejectUnauthorized: false
+        }
+      });
+
       // Paso 2: Enviar a banco receptor
-      const remoteRes = await fetch(`${destIp}/api/sinpe-transfer`, {
+      const remoteRes = await undiciFetch(`${destIp}/api/sinpe-transfer`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(remotePayload),
+        dispatcher: agent,
       });
 
-      const remoteData = await remoteRes.json();
+      const remoteData: any = await remoteRes.json();
 
       // Paso 3: Si falla, rollback
       if (remoteData.status !== 'ACK') {

@@ -41,7 +41,7 @@ const SinpeTransferForm = () => {
     };
 
     try {
-      const res = await fetch('/api/sinpe-transfer', {
+      const res = await fetch('/api/send-sinpe-movil-transfer', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(payload),

@@ -1,11 +1,17 @@
 import { NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
 import { validateTransactionPayload } from '@/lib/transferHelpers';
+import { verifyHmacMD5 } from '@/lib/transferHelpers';
 
 export async function POST(req: Request) {
   const body = await req.json();
   const { valid, error } = validateTransactionPayload(body);
   if (!valid) return NextResponse.json({ error }, { status: 400 });
+
+  // ✅ VALIDAR HMAC
+  if (!verifyHmacMD5(body)) {
+    return NextResponse.json({ status: 'NACK', message: 'Invalid HMAC' }, { status: 400 });
+  }
 
   const { transaction_id, timestamp, sender, receiver, amount, description, hmac_md5 } = body;
 
@@ -29,10 +35,10 @@ export async function POST(req: Request) {
         data: {
           transaction_id,
           timestamp: new Date(timestamp),
-          sender_account_number: sender.account_number,
+          sender_account_number: sender.phone_number,
           sender_bank_code: sender.bank_code,
           sender_name: sender.name,
-          receiver_account_number: receiverAccount.account_number,
+          receiver_account_number: receiverAccount.phone_number,
           receiver_bank_code: receiver.bank_code,
           receiver_name: receiver.name,
           amount_value: amount.value,
@@ -46,6 +52,6 @@ export async function POST(req: Request) {
     return NextResponse.json({ status: 'ACK', message: 'Transferencia acreditada' });
   } catch (err: any) {
     console.error('[SINPE_MOVIL_TRANSFER]', err);
-    return NextResponse.json({ status: 'NCK', message: err.message }, { status: 400 });
+    return NextResponse.json({ status: 'NACK', message: err.message }, { status: 400 });
   }
 }

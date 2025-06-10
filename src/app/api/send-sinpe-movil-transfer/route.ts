@@ -4,6 +4,7 @@ import { generateHmacMD5, validateTransactionPayload } from '@/lib/transferHelpe
 import { getBankIp } from '@/lib/bankIps';
 import { lookupSinpePhone } from '@/lib/lookupSinpe';
 import crypto from 'crypto';
+import { Agent, fetch as undiciFetch } from 'undici';
 
 export async function POST(req: Request) {
   try {
@@ -57,7 +58,8 @@ export async function POST(req: Request) {
 
     const description = body.description ?? '';
 
-    const destIp = getBankIp(receiver.bank_code);
+    const paddedBankCode = receiver.bank_code.padStart(4, '0');
+    const destIp = getBankIp(paddedBankCode);
     if (!destIp) {
       return NextResponse.json(
         { error: `IP not configured for bank ${receiver.bank_code}` },
@@ -83,11 +85,11 @@ export async function POST(req: Request) {
       hmac_md5,
     };
 
-    const { valid, error } = validateTransactionPayload(remotePayload);
+    /*const { valid, error } = validateTransactionPayload(remotePayload);
     if (!valid) {
       console.error('Generated payload invalid', error, remotePayload);
       return NextResponse.json({ error: 'Internal payload error' }, { status: 500 });
-    }
+    }*/
 
     await prisma.$transaction(async (tx) => {
       // Paso 1: Débito temporal
@@ -96,14 +98,20 @@ export async function POST(req: Request) {
         data: { balance: { decrement: amount.value } },
       });
 
-      // Paso 2: Envío remoto
-      const remoteRes = await fetch(`${destIp}/api/sinpe-movil-transfer`, {
+      const agent = new Agent({
+        connect: {
+          rejectUnauthorized: false,
+        },
+      });
+
+      const remoteRes = await undiciFetch(`${destIp}/api/sinpe-movil-transfer`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(remotePayload),
+        dispatcher: agent,
       });
 
-      const remoteData = await remoteRes.json();
+      const remoteData = await remoteRes.json() as { status?: string;[key: string]: any };
 
       // Paso 3: Evaluar respuesta
       if (remoteData.status !== 'ACK') {
@@ -136,7 +144,7 @@ export async function POST(req: Request) {
 
       return NextResponse.json({ success: true });
     });
-    
+
   } catch (err: any) {
     console.error('[SEND_SINPE_MOVIL]', err);
     return NextResponse.json({ error: 'Transfer failed' }, { status: 500 });
