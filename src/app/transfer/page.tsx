@@ -1,6 +1,8 @@
 'use client'
 
 import React, { useState } from 'react';
+import { useEffect } from 'react';
+import { useRouter } from 'next/navigation';
 
 function extractBankCode(account: string) {
   const match = account.match(/^CR21(\d{4})/);
@@ -17,13 +19,36 @@ const TransferForm = () => {
 
   const [loading, setLoading] = useState(false);
   const [message, setMessage] = useState('');
+  const [accounts, setAccounts] = useState([]);
+  const [userId, setUserId] = useState('');
+  const router = useRouter();
 
-  const handleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+  useEffect(() => {
+    const storedId = localStorage.getItem('userId');
+    if (!storedId) {
+      router.push('/login'); 
+      return;
+    }
+    setUserId(storedId);
+  }, [router]);
+
+  useEffect(() => {
+    const fetchAccounts = async () => {
+      const res = await fetch(`/api/my-accounts?cedula=${userId}`);
+      const data = await res.json();
+      setAccounts(data);
+    };
+    if (userId) fetchAccounts();
+  }, [userId]);
+
+  const handleChange = (
+    e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>
+  ) => {
     const { name, value } = e.target;
     // If the user is typing the receiver account, derive its bank code
     if (name === 'receiverAccount') {
       const bankCode = extractBankCode(value);
-      setForm(prev => ({ ...prev, receiverAccount: value}));
+      setForm(prev => ({ ...prev, receiverAccount: value }));
     } else {
       setForm(prev => ({ ...prev, [name]: value }));
     }
@@ -76,13 +101,19 @@ const TransferForm = () => {
       <h2 className="text-2xl font-semibold text-gray-700">Nueva Transferencia</h2>
 
       <div className="grid grid-cols-2 gap-4">
-        <input
+        <select
           name="senderAccount"
-          placeholder="Cuenta Remitente"
           value={form.senderAccount}
           onChange={handleChange}
           className="input col-span-2"
-        />
+        >
+          <option value="">Selecciona tu cuenta</option>
+          {accounts.map((acc: any) => (
+            <option key={acc.account_number} value={acc.account_number}>
+              {acc.account_number} ({acc.bank_code}) - ₡{acc.balance}
+            </option>
+          ))}
+        </select>
         <input
           name="receiverAccount"
           placeholder="Cuenta Receptor"

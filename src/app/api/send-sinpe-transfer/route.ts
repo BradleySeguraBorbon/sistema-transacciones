@@ -117,56 +117,70 @@ export async function POST(req: Request) {
         data: { balance: { decrement: amount.value } },
       });
 
-      const agent = new Agent({
-        connect: {
-          rejectUnauthorized: false
-        }
-      });
+      const isSameBank = receiver.bank_code === '0150';
 
-      // Paso 2: Enviar a banco receptor
-      const remoteRes = await undiciFetch(`${destIp}/api/sinpe-transfer`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(remotePayload),
-        dispatcher: agent,
-      });
+      let transferSuccess = false;
 
-      const remoteData: any = await remoteRes.json();
-
-      // Paso 3: Si falla, rollback
-      if (remoteData.status !== 'ACK') {
+      if (isSameBank) {
+        // Procesar internamente sin fetch
         await tx.account.update({
-          where: { account_number: sender.account_number },
+          where: { account_number: receiver.account_number },
           data: { balance: { increment: amount.value } },
         });
-        return NextResponse.json({
-          error: 'Transfer failed on receiver bank',
-          details: remoteData,
-        }, { status: 400 });
+
+        transferSuccess = true;
+      } else {
+        const agent = new Agent({
+          connect: {
+            rejectUnauthorized: false
+          }
+        });
+
+        // Paso 2: Enviar a banco receptor
+        const remoteRes = await undiciFetch(`${destIp}/api/sinpe-transfer`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(remotePayload),
+          dispatcher: agent,
+        });
+
+        const remoteData: any = await remoteRes.json();
+
+        // Paso 3: Si falla, rollback
+        if (remoteData.status !== 'ACK') {
+          await tx.account.update({
+            where: { account_number: sender.account_number },
+            data: { balance: { increment: amount.value } },
+          });
+          throw new Error(`Transfer failed on receiver bank: ${remoteData.message}`);
+        }
+        transferSuccess = true;
       }
 
-      // Paso 4: Registrar transacción
-      await tx.transaction.create({
-        data: {
-          transaction_id,
-          timestamp: new Date(timestamp),
-          sender_account_number: sender.account_number,
-          sender_bank_code: sender.bank_code,
-          sender_name: sender.name,
-          receiver_account_number: receiver.account_number,
-          receiver_bank_code: receiver.bank_code,
-          receiver_name: receiver.name,
-          amount_value: amount.value,
-          amount_currency: amount.currency,
-          description,
-          hmac_md5,
-        },
-      });
+      if (transferSuccess) {
+        // Paso 4: Registrar transacción
+        await tx.transaction.create({
+          data: {
+            transaction_id,
+            timestamp: new Date(timestamp),
+            sender_account_number: sender.account_number,
+            sender_bank_code: sender.bank_code,
+            sender_name: sender.name,
+            receiver_account_number: receiver.account_number,
+            receiver_bank_code: receiver.bank_code,
+            receiver_name: receiver.name,
+            amount_value: amount.value,
+            amount_currency: amount.currency,
+            description,
+            hmac_md5,
+          },
+        });
+      }
     });
 
     return NextResponse.json({ success: true });
-  } catch (err: any) {
-    console.error('[SEND_TRANSFER]', err);
-    return NextResponse.json({ error: 'Transfer failed' }, { status: 500 });
+    } catch (err: any) {
+      console.error('[SEND_TRANSFER]', err);
+      return NextResponse.json({ error: 'Transfer failed' }, { status: 500 });
+    }
   }
-}

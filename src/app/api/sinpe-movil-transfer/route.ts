@@ -38,7 +38,7 @@ export async function POST(req: Request) {
           sender_account_number: sender.phone_number,
           sender_bank_code: sender.bank_code,
           sender_name: sender.name,
-          receiver_account_number: receiverAccount.phone_number,
+          receiver_account_number: receiverAccount.phone_number!,
           receiver_bank_code: receiver.bank_code,
           receiver_name: receiver.name,
           amount_value: amount.value,
@@ -52,6 +52,6 @@ export async function POST(req: Request) {
     return NextResponse.json({ status: 'ACK', message: 'Transferencia acreditada' });
   } catch (err: any) {
     console.error('[SINPE_MOVIL_TRANSFER]', err);
-    return NextResponse.json({ status: 'NACK', message: err.message }, { status: 400 });
+    return NextResponse.json({ status: 'NACK', message: "Error ejecutando transferencia" }, { status: 400 });
   }
 }

@@ -40,7 +40,7 @@ export async function POST(req: Request) {
     const timestamp = new Date().toISOString();
 
     const sender = {
-      phone_number: senderAccount.phone_number,
+      phone_number: senderAccount.phone_number!,
       bank_code: senderAccount.bank_code,
       name: senderAccount.name,
     };
@@ -119,10 +119,7 @@ export async function POST(req: Request) {
           where: { phone_number: sender.phone_number },
           data: { balance: { increment: amount.value } },
         });
-        return NextResponse.json({
-          error: 'Transfer failed on receiver bank',
-          details: remoteData,
-        }, { status: 400 });
+        throw new Error(`Transfer failed on receiver bank: ${remoteData.message}`);
       }
 
       await tx.transaction.create({
@@ -141,12 +138,11 @@ export async function POST(req: Request) {
           hmac_md5,
         },
       });
-
-      return NextResponse.json({ success: true });
     });
 
+    return NextResponse.json({ success: true });
   } catch (err: any) {
     console.error('[SEND_SINPE_MOVIL]', err);
-    return NextResponse.json({ error: 'Transfer failed' }, { status: 500 });
+    return NextResponse.json({ error: "Error enviando transaccion Sinpe-Movil" }, { status: 500 });
   }
 }

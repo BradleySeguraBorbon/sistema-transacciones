@@ -1,6 +1,7 @@
 'use client'
 
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
+import { useRouter } from 'next/navigation';
 
 const SinpeTransferForm = () => {
   const [form, setForm] = useState({
@@ -12,6 +13,38 @@ const SinpeTransferForm = () => {
 
   const [loading, setLoading] = useState(false);
   const [message, setMessage] = useState('');
+  const [userId, setUserId] = useState('');
+  const router = useRouter();
+
+  useEffect(() => {
+    const storedId = localStorage.getItem('userId');
+    if (!storedId) {
+      router.push('/login');
+      return;
+    }
+    setUserId(storedId);
+  }, [router]);
+
+  useEffect(() => {
+    const fetchSinpePhone = async () => {
+      if (!userId) return;
+
+      const res = await fetch(`/api/my-accounts?cedula=${userId}`);
+      const data = await res.json();
+
+      const accountWithPhone = data.find((acc: any) => acc.phone_number !== null);
+      if (accountWithPhone) {
+        setForm(prev => ({
+          ...prev,
+          senderPhone: accountWithPhone?.phone_number ?? '',
+        }));
+      } else {
+        setMessage('No se encontró una cuenta registrada en SINPE');
+      }
+    };
+
+    fetchSinpePhone();
+  }, [userId]);
 
   const handleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const { name, value } = e.target;
@@ -70,6 +103,7 @@ const SinpeTransferForm = () => {
           placeholder="Teléfono Remitente"
           value={form.senderPhone}
           onChange={handleChange}
+          readOnly
           className="input col-span-2"
         />
         <input

@@ -2,12 +2,12 @@ import { prisma } from "@/lib/prisma";
 
 export const generateIbanNumber = async (): Promise<string> => {
   let iban: string;
-  let exists = true;
+  let exists = true; //CR2101500001000000001234
 
   const countryCode = "CR";
   const checkDigits = "21"; // Opcional: se puede calcular luego
   const fixedZero = "0";
-  const bankCode = "232";   // Cambia según tu banco
+  const bankCode = "0150";   // Cambia según tu banco
   const branchCode = "0001"; // Como indicaste
 
   do {

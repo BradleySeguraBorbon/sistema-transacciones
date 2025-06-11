@@ -1,6 +1,7 @@
 'use client'
 
 import React, { useEffect, useState } from 'react';
+import { useRouter } from 'next/navigation';
 
 interface Transaction {
   transaction_id: string;
@@ -18,23 +19,38 @@ const TransactionList = () => {
   const [transactions, setTransactions] = useState<Transaction[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
+  const router = useRouter();
 
   useEffect(() => {
-    const fetchTransactions = async () => {
-      try {
-        const res = await fetch('/api/transaction');
-        const data = await res.json();
-        if (!res.ok) throw new Error(data.error || 'Error al obtener transacciones');
-        setTransactions(data);
-      } catch (err: any) {
-        setError(err.message);
-      } finally {
-        setLoading(false);
-      }
-    };
+    const userId = localStorage.getItem('userId');
+    if (!userId) {
+      router.push('/login');
+      return;
+    }
 
-    fetchTransactions();
-  }, []);
+    fetch(`/api/user-info?id=${userId}`)
+      .then(res => res.json())
+      .then(data => {
+        if (!data?.isAdmin) {
+          router.push('/login'); // bloquear si no es admin
+          return;
+        }
+        const fetchTransactions = async () => {
+          try {
+            const res = await fetch('/api/transaction');
+            const data = await res.json();
+            if (!res.ok) throw new Error(data.error || 'Error al obtener transacciones');
+            setTransactions(data);
+          } catch (err: any) {
+            setError(err.message);
+          } finally {
+            setLoading(false);
+          }
+        };
+
+        fetchTransactions();
+      });
+  }, [router]);
 
   return (
     <div className="max-w-7xl mx-auto mt-10 p-4 bg-white shadow-md rounded-lg text-black">

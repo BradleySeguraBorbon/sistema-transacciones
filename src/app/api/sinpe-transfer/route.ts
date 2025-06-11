@@ -53,6 +53,6 @@ export async function POST(req: Request) {
     return NextResponse.json({ status: 'ACK', message: 'Transferencia acreditada' });
   } catch (err: any) {
     console.error('[SINPE_TRANSFER]', err);
-    return NextResponse.json({ status: 'NACK', message: "Error recibiendo la transacción" }, { status: 400 });
+    return NextResponse.json({ status: 'NACK', message: "Error ejecutando transferencia" }, { status: 400 });
   }
 }

@@ -15,12 +15,22 @@ model Bank {
   createdAt DateTime @default(now())
 }
 
+model User {
+  id         String   @id
+  name       String
+  phone      String   @unique
+  password   String
+  isAdmin    Boolean  @default(false)
+  created_at DateTime @default(now())
+}
+
 model Account {
   account_number String @id          
   name           String
-  phone_number   String @unique
+  phone_number   String? @unique
   bank_code      String              
   balance        Float
+  owner_id       String?
   createdAt      DateTime @default(now())
 }
 
@@ -28,11 +38,11 @@ model Transaction {
   transaction_id          String   @id @default(uuid())
   timestamp               DateTime @default(now())
   sender_account_number   String
-  sender_bank_code        String
-  sender_name             String
+  sender_bank_code        String?
+  sender_name             String?
   receiver_account_number String
-  receiver_bank_code      String
-  receiver_name           String
+  receiver_bank_code      String?
+  receiver_name           String?
   amount_value            Float
   amount_currency         String
   description             String

@@ -4,7 +4,7 @@ services:
   nginx:
     build: .
     ports:
-      - "443:443"
+      - "3443:3443"
     networks:
       - redes
 

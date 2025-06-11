@@ -1,7 +1,7 @@
 'use client'
 
 import { useEffect, useState } from 'react';
-
+import { useRouter } from 'next/navigation';
 interface Account {
   account_number: string;
   name: string;
@@ -13,12 +13,27 @@ interface Account {
 
 export default function BalancesPage() {
   const [accounts, setAccounts] = useState<Account[]>([]);
+  const router = useRouter();
 
   useEffect(() => {
-    fetch('/api/accounts')
-      .then(res => res.json())
-      .then(data => setAccounts(data));
-  }, []);
+  const userId = localStorage.getItem('userId');
+  if (!userId) {
+    router.push('/login');
+    return;
+  }
+
+  fetch(`/api/user-info?id=${userId}`)
+    .then(res => res.json())
+    .then(data => {
+      const endpoint = data?.isAdmin
+        ? '/api/accounts'
+        : `/api/accounts?owner_id=${userId}`;
+
+      fetch(endpoint)
+        .then(res => res.json())
+        .then(data => setAccounts(data));
+    });
+}, [router]);
 
   return (
     <main className="min-h-screen bg-gray-50 p-6 text-black">
